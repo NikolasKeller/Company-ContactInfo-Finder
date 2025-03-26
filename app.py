@@ -54,9 +54,12 @@ def search():
         'data': results
     })
 
-# Für Vercel Serverless Functions
+# Für Vercel Serverless Functions - WICHTIG!
 # Der Einstiegspunkt muss 'app' sein
-app.debug = False
+from http.server import BaseHTTPRequestHandler
+
+def handler(event, context):
+    return app(event, context)
 
 # Nur für lokale Entwicklung
 if __name__ == '__main__':
