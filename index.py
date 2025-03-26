@@ -125,6 +125,9 @@ def search():
     if not companies:
         return jsonify({'error': 'Keine Unternehmen angegeben'}), 400
     
+    if not anthropic_key:
+        return jsonify({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein oder konfigurieren Sie die Umgebungsvariable.'}), 400
+    
     # Claude-Client initialisieren
     claude = ClaudeClient(api_key=anthropic_key)
     
