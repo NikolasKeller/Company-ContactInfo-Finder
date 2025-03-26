@@ -54,13 +54,6 @@ def search():
         'data': results
     })
 
-# Für Vercel Serverless Functions - WICHTIG!
-# Der Einstiegspunkt muss 'app' sein
-from http.server import BaseHTTPRequestHandler
-
-def handler(event, context):
-    return app(event, context)
-
 # Nur für lokale Entwicklung
 if __name__ == '__main__':
     print(f"ANTHROPIC_API_KEY gefunden: {os.environ.get('ANTHROPIC_API_KEY') is not None}")
