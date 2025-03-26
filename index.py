@@ -26,9 +26,18 @@ class ClaudeClient:
 
         Für Telefonnummern:
         - Suche nach offiziellen Kontaktseiten oder "Kontakt"-Abschnitten auf der Unternehmenswebsite
-        - Überprüfe auch Business-Verzeichnisse wie Google Business Profile
+        - Überprüfe die Haupttelefonnummer des Unternehmens, nicht lokale Niederlassungen
         - Stelle sicher, dass die Nummer vollständig ist (mit Ländervorwahl)
-        - Formatiere die Nummer einheitlich, z.B. +1 (678) 926-9659 für US-Nummern
+        - Behalte das originale Format der Nummer bei, z.B. +1 877.800.1634
+        - Überprüfe die Nummer sorgfältig - sie ist ein kritisches Element
+
+        Für E-Mail-Adressen:
+        - Suche nach allgemeinen Kontakt-E-Mails wie info@unternehmen.com
+        - Überprüfe die E-Mail-Adresse auf Tippfehler
+
+        Für Website-URLs:
+        - Gib die Haupt-URL des Unternehmens an, nicht Unterseiten
+        - Stelle sicher, dass die URL mit http:// oder https:// beginnt
 
         Gib die Informationen im folgenden JSON-Format zurück:
         {{
