@@ -1,23 +1,16 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
-from dotenv import load_dotenv
 import anthropic
 import json
 
-# Laden der Umgebungsvariablen
-load_dotenv()
-
-app = Flask(__name__, 
-            template_folder=os.path.abspath("templates"),
-            static_folder=os.path.abspath("static"))
+app = Flask(__name__)
 
 class ClaudeClient:
-    def __init__(self, api_key=None):
-        self.api_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
-        print("API-Schlüssel in ClaudeClient:", self.api_key[:5] + "..." if self.api_key else None)  # Debug-Ausgabe
-        if not self.api_key:
+    def __init__(self, api_key):
+        if not api_key:
             raise ValueError("Anthropic API-Schlüssel ist erforderlich")
         
+        self.api_key = api_key
         self.client = anthropic.Anthropic(api_key=self.api_key)
     
     def get_company_info(self, company_name):
@@ -59,7 +52,7 @@ class ClaudeClient:
             response = self.client.messages.create(
                 model="claude-3-haiku-20240307",
                 max_tokens=1500,
-                temperature=0.2,  # Leicht erhöhte Temperatur für mehr Exploration
+                temperature=0.2,
                 system="Du bist ein präziser Recherche-Assistent, der Unternehmensinformationen findet. Achte besonders auf die korrekte Telefonnummer, die exakt so wiedergegeben werden soll, wie sie auf der offiziellen Website erscheint.",
                 messages=[
                     {"role": "user", "content": prompt}
@@ -110,10 +103,6 @@ class ClaudeClient:
                 "email": None,
                 "website": None
             }
-
-    def _make_claude_request(self, company_name):
-        # Ursprüngliche Implementierung hier
-        pass
 
 @app.route('/')
 def index():
@@ -330,6 +319,18 @@ def index():
             .feedback-alert {
                 animation: slideIn 0.3s ease-out forwards;
             }
+            
+            .api-key-section {
+                background-color: #fff3cd;
+                border: 1px solid #ffeeba;
+                border-radius: 10px;
+                padding: 15px;
+                margin-bottom: 20px;
+            }
+            
+            .api-key-section h5 {
+                color: #856404;
+            }
         </style>
     </head>
     <body>
@@ -354,13 +355,21 @@ def index():
                     <div class="guide-step">
                         <div class="step-number">2</div>
                         <div class="step-content">
+                            <h5>API-Schlüssel eingeben</h5>
+                            <p>Geben Sie Ihren Anthropic API-Schlüssel ein. Dieser wird benötigt, um die KI-gestützte Suche durchzuführen.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="guide-step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
                             <h5>Suche starten</h5>
                             <p>Klicken Sie auf "Unternehmensdaten suchen", um die KI-gestützte Suche zu starten.</p>
                         </div>
                     </div>
                     
                     <div class="guide-step">
-                        <div class="step-number">3</div>
+                        <div class="step-number">4</div>
                         <div class="step-content">
                             <h5>Ergebnisse nutzen</h5>
                             <p>Für jedes gefundene Unternehmen können Sie mit dem grünen "Alles auf einmal"-Button die Kontaktdaten kopieren und gleichzeitig die Website öffnen.</p>
@@ -368,12 +377,29 @@ def index():
                     </div>
                     
                     <div class="guide-step">
-                        <div class="step-number">4</div>
+                        <div class="step-number">5</div>
                         <div class="step-content">
                             <h5>Daten exportieren</h5>
                             <p>Nutzen Sie den "Als CSV exportieren"-Button, um alle gefundenen Daten für die weitere Verwendung zu speichern.</p>
                         </div>
                     </div>
+                </div>
+            </div>
+            
+            <div class="api-key-section mb-4">
+                <h5><i class="bi bi-key"></i> API-Schlüssel erforderlich</h5>
+                <p>Diese Anwendung verwendet die Claude API von Anthropic. Sie benötigen einen eigenen API-Schlüssel, um die Anwendung zu nutzen.</p>
+                <p>So erhalten Sie einen API-Schlüssel:</p>
+                <ol>
+                    <li>Besuchen Sie <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a></li>
+                    <li>Erstellen Sie ein Konto oder melden Sie sich an</li>
+                    <li>Navigieren Sie zu "API Keys" und erstellen Sie einen neuen Schlüssel</li>
+                    <li>Kopieren Sie den Schlüssel und fügen Sie ihn unten ein</li>
+                </ol>
+                <div class="form-group">
+                    <label for="apiKey"><strong>Anthropic API-Schlüssel (erforderlich):</strong></label>
+                    <input type="text" id="apiKey" class="form-control" placeholder="sk-ant-api...">
+                    <small class="form-text text-muted">Ihr API-Schlüssel wird nur für diese Sitzung verwendet und nicht gespeichert.</small>
                 </div>
             </div>
             
@@ -385,12 +411,6 @@ def index():
                         <textarea class="form-control" id="companyList" rows="10" placeholder="Unternehmen A&#10;Unternehmen B&#10;Unternehmen C"></textarea>
                     </div>
                 </div>
-            </div>
-            
-            <div class="form-group mb-4">
-                <label for="apiKey">Anthropic API-Schlüssel (erforderlich):</label>
-                <input type="text" id="apiKey" class="form-control" placeholder="sk-ant-api...">
-                <small class="form-text text-muted">Wird nur für diese Sitzung verwendet und nicht gespeichert.</small>
             </div>
             
             <div class="d-grid gap-2">
@@ -443,10 +463,15 @@ def index():
                 const apiKeyInput = document.getElementById('apiKey');
                 const anthropicKey = apiKeyInput ? apiKeyInput.value.trim() : '';
                 
-                console.log("Sende API-Schlüssel:", anthropicKey ? "Ja (Länge: " + anthropicKey.length + ")" : "Nein");
-                
                 if (!anthropicKey) {
-                    alert('Bitte geben Sie einen Anthropic API-Schlüssel ein.');
+                    alert('Bitte geben Sie einen Anthropic API-Schlüssel ein. Dieser ist erforderlich, um die Suche durchzuführen.');
+                    apiKeyInput.focus();
+                    return;
+                }
+                
+                if (!anthropicKey.startsWith('sk-ant-')) {
+                    alert('Der eingegebene API-Schlüssel scheint ungültig zu sein. Anthropic API-Schlüssel beginnen mit "sk-ant-".');
+                    apiKeyInput.focus();
                     return;
                 }
                 
@@ -460,8 +485,6 @@ def index():
                         companies: companies,
                         anthropicKey: anthropicKey
                     };
-                    
-                    console.log("Sende Daten:", JSON.stringify(requestData));
                     
                     const response = await fetch('/search', {
                         method: 'POST',
@@ -598,19 +621,22 @@ def index():
 @app.route('/search', methods=['POST'])
 def search():
     data = request.json
-    print("Empfangene Daten:", data)  # Debug-Ausgabe
     companies = data.get('companies', [])
-    anthropic_key = data.get('anthropicKey') or os.environ.get('ANTHROPIC_API_KEY')
-    print("API-Schlüssel vorhanden:", bool(anthropic_key))  # Debug-Ausgabe
+    anthropic_key = data.get('anthropicKey')
     
     if not companies:
         return jsonify({'error': 'Keine Unternehmen angegeben'}), 400
     
     if not anthropic_key:
-        return jsonify({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein oder konfigurieren Sie die Umgebungsvariable.'}), 400
+        return jsonify({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein.'}), 400
     
     # Claude-Client initialisieren
-    claude = ClaudeClient(api_key=anthropic_key)
+    try:
+        claude = ClaudeClient(api_key=anthropic_key)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Fehler bei der Initialisierung des Claude-Clients: {str(e)}'}), 500
     
     # Ergebnisse für jedes Unternehmen abrufen
     results = []
@@ -631,10 +657,6 @@ def search():
         'message': f"{len(results)} Unternehmen erfolgreich verarbeitet",
         'data': results
     })
-
-@app.route('/test')
-def test():
-    return render_template('test.html')
 
 # Für lokale Entwicklung
 if __name__ == '__main__':
