@@ -1,4 +1,3 @@
-from http.server import BaseHTTPRequestHandler
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
 import anthropic
@@ -6,21 +5,19 @@ import json
 
 app = Flask(__name__)
 
+# Vercel-Handler
+class handler:
+    def __call__(self, req):
+        return app(req)
+
 class ClaudeClient:
     def __init__(self, api_key):
         if not api_key:
             raise ValueError("Anthropic API-Schlüssel ist erforderlich")
         
         self.api_key = api_key
-        # Verwenden Sie die neueste Methode zur Initialisierung des Clients
-        try:
-            self.client = anthropic.Anthropic(api_key=self.api_key)
-        except TypeError as e:
-            # Fallback für ältere Versionen der Bibliothek
-            if "unexpected keyword argument" in str(e):
-                self.client = anthropic.Client(api_key=self.api_key)
-            else:
-                raise
+        # Einfache Initialisierung ohne try/except
+        self.client = anthropic.Client(api_key=self.api_key)
     
     def get_company_info(self, company_name):
         prompt = f"""
@@ -58,27 +55,14 @@ class ClaudeClient:
         """
         
         try:
-            # Versuche zuerst die neuere API-Version
-            try:
-                response = self.client.messages.create(
-                    model="claude-3-haiku-20240307",
-                    max_tokens=1500,
-                    temperature=0.2,
-                    system="Du bist ein präziser Recherche-Assistent, der Unternehmensinformationen findet. Achte besonders auf die korrekte Telefonnummer, die exakt so wiedergegeben werden soll, wie sie auf der offiziellen Website erscheint.",
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                content = response.content[0].text
-            except (AttributeError, TypeError):
-                # Fallback für ältere API-Version
-                response = self.client.completion(
-                    prompt=f"\n\nHuman: {prompt}\n\nAssistant:",
-                    model="claude-3-haiku-20240307",
-                    max_tokens_to_sample=1500,
-                    temperature=0.2
-                )
-                content = response.completion
+            # Verwende die einfachere completion-Methode
+            response = self.client.completion(
+                prompt=f"\n\nHuman: {prompt}\n\nAssistant:",
+                model="claude-3-haiku-20240307",
+                max_tokens_to_sample=1500,
+                temperature=0.2
+            )
+            content = response.completion
             
             # Bereinige die Antwort, falls sie nicht direkt als JSON formatiert ist
             if "```json" in content:
@@ -343,146 +327,3 @@ def index():
                         const row = document.createElement('tr');
                         
                         row.innerHTML = `
-                            <td><strong>${item.name}</strong></td>
-                            <td>${item.phone || '-'}</td>
-                            <td>${item.email || '-'}</td>
-                            <td>
-                                <div class="d-flex align-items-center justify-content-between">
-                                    <a href="${item.website}" target="_blank" class="text-primary me-2 text-truncate" style="max-width: 70%;">${item.website || '-'}</a>
-                                    ${(item.email || item.phone) && item.website ? 
-                                        `<button class="btn btn-sm btn-success flex-shrink-0" 
-                                            data-phone="${item.phone || ''}" 
-                                            data-email="${item.email || ''}" 
-                                            data-website="${item.website}">
-                                            <i class="bi bi-lightning-fill"></i> Alles auf einmal
-                                        </button>` : ''}
-                                </div>
-                            </td>
-                        `;
-                        
-                        resultTable.appendChild(row);
-                    });
-
-                    document.getElementById('results').style.display = 'block';
-                } catch (error) {
-                    console.error('Fehler beim Suchen:', error);
-                    alert('Es ist ein Fehler aufgetreten: ' + error.message);
-                } finally {
-                    document.getElementById('spinner').style.display = 'none';
-                    document.getElementById('searchBtn').disabled = false;
-                }
-            });
-
-            document.getElementById('exportBtn').addEventListener('click', function() {
-                const table = document.getElementById('resultTable');
-                const rows = table.querySelectorAll('tr');
-                
-                let csvContent = "Unternehmen,Telefon,E-Mail,Website\\n";
-                
-                rows.forEach(row => {
-                    const cells = row.querySelectorAll('td');
-                    const rowData = Array.from(cells).slice(0, 4).map(cell => {
-                        const link = cell.querySelector('a');
-                        let value = link ? link.getAttribute('href') : cell.textContent;
-                        
-                        if (value.includes(',')) {
-                            value = `"${value}"`;
-                        }
-                        
-                        return value;
-                    });
-                    
-                    csvContent += rowData.join(',') + '\\n';
-                });
-                
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.setAttribute('href', url);
-                link.setAttribute('download', 'unternehmensdaten.csv');
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            });
-
-            document.addEventListener('click', function(e) {
-                if (e.target.classList.contains('btn-success') || e.target.closest('.btn-success')) {
-                    const button = e.target.classList.contains('btn-success') ? e.target : e.target.closest('.btn-success');
-                    if (!button.hasAttribute('data-website')) return;
-                    
-                    const phone = button.getAttribute('data-phone');
-                    const email = button.getAttribute('data-email');
-                    const website = button.getAttribute('data-website');
-                    
-                    let contactInfo = '';
-                    if (email) contactInfo += `E-Mail: ${email}\\n`;
-                    if (phone) contactInfo += `Telefon: ${phone}`;
-                    
-                    navigator.clipboard.writeText(contactInfo).then(() => {
-                        window.open(website, '_blank');
-                        
-                        const feedbackDiv = document.createElement('div');
-                        feedbackDiv.className = 'alert alert-success position-fixed bottom-0 end-0 m-3';
-                        feedbackDiv.style.zIndex = '1050';
-                        feedbackDiv.innerHTML = `
-                            <strong><i class="bi bi-check-circle"></i> Erfolg!</strong> Kontaktdaten kopiert und Website geöffnet.
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        `;
-                        document.body.appendChild(feedbackDiv);
-                        
-                        setTimeout(() => {
-                            feedbackDiv.remove();
-                        }, 3000);
-                    });
-                }
-            });
-        </script>
-    </body>
-    </html>
-    """
-    return html
-
-@app.route('/search', methods=['POST'])
-def search():
-    data = request.json
-    companies = data.get('companies', [])
-    anthropic_key = data.get('anthropicKey')
-    
-    if not companies:
-        return jsonify({'error': 'Keine Unternehmen angegeben'}), 400
-    
-    if not anthropic_key:
-        return jsonify({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein.'}), 400
-    
-    # Claude-Client initialisieren
-    try:
-        claude = ClaudeClient(api_key=anthropic_key)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        return jsonify({'error': f'Fehler bei der Initialisierung des Claude-Clients: {str(e)}'}), 500
-    
-    # Ergebnisse für jedes Unternehmen abrufen
-    results = []
-    for company in companies:
-        try:
-            result = claude.get_company_info(company)
-            results.append(result)
-        except Exception as e:
-            print(f"Fehler bei {company}: {e}")
-            results.append({
-                'name': company,
-                'phone': None,
-                'email': None,
-                'website': None
-            })
-    
-    return jsonify({
-        'message': f"{len(results)} Unternehmen erfolgreich verarbeitet",
-        'data': results
-    })
-
-# Für lokale Entwicklung
-if __name__ == '__main__':
-    app.run(debug=True) 
