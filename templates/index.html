@@ -319,7 +319,8 @@
                 .map(company => company.trim())
                 .filter(company => company.length > 0);
             
-            const anthropicKey = localStorage.getItem('anthropicKey') || '';
+            // API-Schlüssel aus dem Eingabefeld holen
+            const anthropicKey = document.getElementById('apiKey').value.trim();
             
             // UI-Elemente aktualisieren
             document.getElementById('spinner').style.display = 'inline-block';
@@ -341,6 +342,7 @@
                 const data = await response.json();
                 
                 if (data.error) {
+                    alert(data.error);
                     throw new Error(data.error);
                 }
                 
@@ -377,7 +379,7 @@
                 document.getElementById('results').style.display = 'block';
             } catch (error) {
                 console.error('Fehler beim Suchen:', error);
-                alert('Es ist ein Fehler aufgetreten. Bitte versuchen Sie es später erneut.');
+                alert('Es ist ein Fehler aufgetreten: ' + error.message);
             } finally {
                 document.getElementById('spinner').style.display = 'none';
                 document.getElementById('searchBtn').disabled = false;
