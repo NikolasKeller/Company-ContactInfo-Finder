@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 import os
 import anthropic
 import json
@@ -118,7 +118,6 @@ def index():
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
         <style>
-            /* CSS-Stile hier */
             body {
                 background-color: #f5f7fa;
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -151,6 +150,40 @@ def index():
                 border-radius: 10px;
                 padding: 15px;
                 margin-bottom: 20px;
+            }
+            
+            .guide-step {
+                display: flex;
+                margin-bottom: 15px;
+                align-items: flex-start;
+            }
+            
+            .step-number {
+                background-color: #f39c12;
+                color: white;
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: bold;
+                margin-right: 15px;
+                flex-shrink: 0;
+            }
+            
+            .step-content {
+                flex-grow: 1;
+            }
+            
+            .step-content h5 {
+                margin-top: 0;
+                margin-bottom: 5px;
+            }
+            
+            .spinner-border {
+                display: none;
+                margin-left: 10px;
             }
         </style>
     </head>
@@ -327,3 +360,174 @@ def index():
                         const row = document.createElement('tr');
                         
                         row.innerHTML = `
+                            <td><strong>${item.name}</strong></td>
+                            <td>${item.phone || '-'}</td>
+                            <td>${item.email || '-'}</td>
+                            <td>
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <a href="${item.website}" target="_blank" class="text-primary me-2 text-truncate" style="max-width: 70%;">${item.website || '-'}</a>
+                                    ${(item.email || item.phone) && item.website ? 
+                                        `<button class="btn btn-sm btn-success flex-shrink-0" 
+                                            data-phone="${item.phone || ''}" 
+                                            data-email="${item.email || ''}" 
+                                            data-website="${item.website}">
+                                            <i class="bi bi-lightning-fill"></i> Alles auf einmal
+                                        </button>` : ''}
+                                </div>
+                            </td>
+                        `;
+                        
+                        resultTable.appendChild(row);
+                    });
+
+                    document.getElementById('results').style.display = 'block';
+                } catch (error) {
+                    console.error('Fehler beim Suchen:', error);
+                    alert('Es ist ein Fehler aufgetreten: ' + error.message);
+                } finally {
+                    document.getElementById('spinner').style.display = 'none';
+                    document.getElementById('searchBtn').disabled = false;
+                }
+            });
+
+            document.getElementById('exportBtn').addEventListener('click', function() {
+                const table = document.getElementById('resultTable');
+                const rows = table.querySelectorAll('tr');
+                
+                let csvContent = "Unternehmen,Telefon,E-Mail,Website\\n";
+                
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    const rowData = Array.from(cells).slice(0, 4).map(cell => {
+                        const link = cell.querySelector('a');
+                        let value = link ? link.getAttribute('href') : cell.textContent;
+                        
+                        if (value.includes(',')) {
+                            value = `"${value}"`;
+                        }
+                        
+                        return value;
+                    });
+                    
+                    csvContent += rowData.join(',') + '\\n';
+                });
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'unternehmensdaten.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('btn-success') || e.target.closest('.btn-success')) {
+                    const button = e.target.classList.contains('btn-success') ? e.target : e.target.closest('.btn-success');
+                    if (!button.hasAttribute('data-website')) return;
+                    
+                    const phone = button.getAttribute('data-phone');
+                    const email = button.getAttribute('data-email');
+                    const website = button.getAttribute('data-website');
+                    
+                    let contactInfo = '';
+                    if (email) contactInfo += `E-Mail: ${email}\\n`;
+                    if (phone) contactInfo += `Telefon: ${phone}`;
+                    
+                    navigator.clipboard.writeText(contactInfo).then(() => {
+                        window.open(website, '_blank');
+                        
+                        const feedbackDiv = document.createElement('div');
+                        feedbackDiv.className = 'alert alert-success position-fixed bottom-0 end-0 m-3';
+                        feedbackDiv.style.zIndex = '1050';
+                        feedbackDiv.innerHTML = `
+                            <strong><i class="bi bi-check-circle"></i> Erfolg!</strong> Kontaktdaten kopiert und Website geöffnet.
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        `;
+                        document.body.appendChild(feedbackDiv);
+                        
+                        setTimeout(() => {
+                            feedbackDiv.remove();
+                        }, 3000);
+                    });
+                }
+            });
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
+@app.route('/search', methods=['POST'])
+def search():
+    try:
+        data = request.json
+        print(f"Empfangene Daten: {data}")
+        companies = data.get('companies', [])
+        anthropic_key = data.get('anthropicKey')
+        
+        print(f"Unternehmen: {companies}")
+        print(f"API-Schlüssel vorhanden: {bool(anthropic_key)}")
+        
+        if not companies:
+            return jsonify({'error': 'Keine Unternehmen angegeben'}), 400
+        
+        if not anthropic_key:
+            return jsonify({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein.'}), 400
+        
+        # Claude-Client initialisieren
+        try:
+            print("Initialisiere Claude-Client...")
+            claude = ClaudeClient(api_key=anthropic_key)
+            print("Claude-Client erfolgreich initialisiert")
+        except ValueError as e:
+            print(f"ValueError bei der Initialisierung: {e}")
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            print(f"Ausnahme bei der Initialisierung: {e}")
+            return jsonify({'error': f'Fehler bei der Initialisierung des Claude-Clients: {str(e)}'}), 500
+        
+        # Ergebnisse für jedes Unternehmen abrufen
+        results = []
+        for company in companies:
+            try:
+                print(f"Verarbeite Unternehmen: {company}")
+                result = claude.get_company_info(company)
+                results.append(result)
+                print(f"Ergebnis für {company}: {result}")
+            except Exception as e:
+                print(f"Fehler bei {company}: {e}")
+                results.append({
+                    'name': company,
+                    'phone': None,
+                    'email': None,
+                    'website': None
+                })
+        
+        return jsonify({
+            'message': f"{len(results)} Unternehmen erfolgreich verarbeitet",
+            'data': results
+        })
+    except Exception as e:
+        print(f"Unbehandelte Ausnahme in search: {e}")
+        return jsonify({'error': f'Ein unerwarteter Fehler ist aufgetreten: {str(e)}'}), 500
+
+@app.route('/test', methods=['GET'])
+def test():
+    return jsonify({"status": "ok", "message": "Test erfolgreich"})
+
+@app.errorhandler(500)
+def handle_500(e):
+    print(f"500 Fehler: {str(e)}")
+    return jsonify({"error": "Ein interner Serverfehler ist aufgetreten. Bitte versuchen Sie es später erneut."}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print(f"Unbehandelte Ausnahme: {str(e)}")
+    return jsonify({"error": f"Ein unerwarteter Fehler ist aufgetreten: {str(e)}"}), 500
+
+# Für lokale Entwicklung
+if __name__ == '__main__':
+    app.run(debug=True)
