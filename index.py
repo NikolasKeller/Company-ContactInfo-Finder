@@ -20,9 +20,15 @@ class ClaudeClient:
     def get_company_info(self, company_name):
         prompt = f"""
         Finde die folgenden Informationen für das Unternehmen "{company_name}":
-        1. Telefonnummer (bevorzugt Festnetz, international formatiert)
+        1. Telefonnummer (bevorzugt Festnetz, international formatiert mit Ländercode)
         2. E-Mail-Adresse (bevorzugt allgemeine Kontakt-E-Mail)
         3. Website-URL (mit https://)
+
+        Für Telefonnummern:
+        - Suche nach offiziellen Kontaktseiten oder "Kontakt"-Abschnitten auf der Unternehmenswebsite
+        - Überprüfe auch Business-Verzeichnisse wie Google Business Profile
+        - Stelle sicher, dass die Nummer vollständig ist (mit Ländervorwahl)
+        - Formatiere die Nummer einheitlich, z.B. +1 (678) 926-9659 für US-Nummern
 
         Gib die Informationen im folgenden JSON-Format zurück:
         {{
