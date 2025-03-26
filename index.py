@@ -310,10 +310,15 @@ def index():
                 font-weight: 600;
             }
             
-            /* Animation für Feedback */
             @keyframes slideIn {
-                from { transform: translateY(100px); opacity: 0; }
-                to { transform: translateY(0); opacity: 1; }
+                from {
+                    transform: translateY(20px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateY(0);
+                    opacity: 1;
+                }
             }
             
             .feedback-alert {
@@ -337,12 +342,12 @@ def index():
         <div class="container">
             <div class="app-header">
                 <h1><i class="bi bi-search"></i> Unternehmensdaten-Finder</h1>
-                <p>Finden Sie schnell Kontaktinformationen für Unternehmen</p>
+                <p>Finden Sie schnell Kontaktdaten für Unternehmen mit KI-Unterstützung</p>
             </div>
             
             <div class="card guide-card mb-4">
                 <div class="card-body">
-                    <h5 class="card-title"><i class="bi bi-info-circle"></i> So funktioniert's</h5>
+                    <h4 class="card-title"><i class="bi bi-info-circle"></i> So funktioniert's</h4>
                     
                     <div class="guide-step">
                         <div class="step-number">1</div>
@@ -404,11 +409,13 @@ def index():
             </div>
             
             <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-building"></i> Unternehmensliste
+                </div>
                 <div class="card-body">
-                    <h5 class="card-title"><i class="bi bi-building"></i> Unternehmensliste</h5>
-                    <div class="mb-3">
-                        <label for="companyList" class="form-label">Unternehmensnamen (ein Unternehmen pro Zeile)</label>
-                        <textarea class="form-control" id="companyList" rows="10" placeholder="Unternehmen A&#10;Unternehmen B&#10;Unternehmen C"></textarea>
+                    <div class="form-group">
+                        <label for="companyList">Unternehmensnamen (ein Unternehmen pro Zeile):</label>
+                        <textarea id="companyList" class="form-control" rows="10" placeholder="Beispiel:&#10;Anhui Heli Co., Ltd&#10;Anyline Inc.&#10;Apache Mills, Inc."></textarea>
                     </div>
                 </div>
             </div>
