@@ -12,6 +12,7 @@ app = Flask(__name__)
 class ClaudeClient:
     def __init__(self, api_key=None):
         self.api_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
+        print("API-Schlüssel in ClaudeClient:", self.api_key[:5] + "..." if self.api_key else None)  # Debug-Ausgabe
         if not self.api_key:
             raise ValueError("Anthropic API-Schlüssel ist erforderlich")
         
@@ -119,8 +120,10 @@ def index():
 @app.route('/search', methods=['POST'])
 def search():
     data = request.json
+    print("Empfangene Daten:", data)  # Debug-Ausgabe
     companies = data.get('companies', [])
     anthropic_key = data.get('anthropicKey') or os.environ.get('ANTHROPIC_API_KEY')
+    print("API-Schlüssel vorhanden:", bool(anthropic_key))  # Debug-Ausgabe
     
     if not companies:
         return jsonify({'error': 'Keine Unternehmen angegeben'}), 400

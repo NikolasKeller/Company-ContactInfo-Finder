@@ -320,7 +320,10 @@
                 .filter(company => company.length > 0);
             
             // API-Schlüssel aus dem Eingabefeld holen
-            const anthropicKey = document.getElementById('apiKey').value.trim();
+            const apiKeyInput = document.getElementById('apiKey');
+            const anthropicKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+            
+            console.log("Sende API-Schlüssel:", anthropicKey ? "Ja (Länge: " + anthropicKey.length + ")" : "Nein");
             
             // UI-Elemente aktualisieren
             document.getElementById('spinner').style.display = 'inline-block';
@@ -328,15 +331,23 @@
             document.getElementById('results').style.display = 'none';
             
             try {
+                const requestData = {
+                    companies: companies
+                };
+                
+                // Nur hinzufügen, wenn ein API-Schlüssel eingegeben wurde
+                if (anthropicKey) {
+                    requestData.anthropicKey = anthropicKey;
+                }
+                
+                console.log("Sende Daten:", JSON.stringify(requestData));
+                
                 const response = await fetch('/search', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        companies: companies,
-                        anthropicKey: anthropicKey
-                    })
+                    body: JSON.stringify(requestData)
                 });
                 
                 const data = await response.json();
