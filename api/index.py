@@ -1,14 +1,108 @@
+from http.server import BaseHTTPRequestHandler
 from flask import Flask, request, jsonify
 import os
 import anthropic
 import json
+import urllib.parse
 
 app = Flask(__name__)
 
-# Vercel-Handler
-class handler:
-    def __call__(self, req):
-        return app(req)
+# Korrekter Vercel-Handler
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        
+        path = self.path
+        if path == '/':
+            response = index()
+        elif path == '/test':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "message": "Test erfolgreich"}).encode())
+            return
+        else:
+            response = "404 Not Found"
+        
+        self.wfile.write(response.encode())
+        return
+    
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        
+        if self.path == '/search':
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                companies = data.get('companies', [])
+                anthropic_key = data.get('anthropicKey')
+                
+                if not companies:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'Keine Unternehmen angegeben'}).encode())
+                    return
+                
+                if not anthropic_key:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein.'}).encode())
+                    return
+                
+                # Claude-Client initialisieren
+                try:
+                    claude = ClaudeClient(api_key=anthropic_key)
+                except ValueError as e:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': str(e)}).encode())
+                    return
+                except Exception as e:
+                    self.send_response(500)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': f'Fehler bei der Initialisierung des Claude-Clients: {str(e)}'}).encode())
+                    return
+                
+                # Ergebnisse für jedes Unternehmen abrufen
+                results = []
+                for company in companies:
+                    try:
+                        result = claude.get_company_info(company)
+                        results.append(result)
+                    except Exception as e:
+                        results.append({
+                            'name': company,
+                            'phone': None,
+                            'email': None,
+                            'website': None
+                        })
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'message': f"{len(results)} Unternehmen erfolgreich verarbeitet",
+                    'data': results
+                }).encode())
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': f'Ein unerwarteter Fehler ist aufgetreten: {str(e)}'}).encode())
+                return
+        else:
+            self.send_response(404)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'error': 'Endpoint nicht gefunden'}).encode())
+            return
 
 class ClaudeClient:
     def __init__(self, api_key):
@@ -16,7 +110,6 @@ class ClaudeClient:
             raise ValueError("Anthropic API-Schlüssel ist erforderlich")
         
         self.api_key = api_key
-        # Einfache Initialisierung ohne try/except
         self.client = anthropic.Client(api_key=self.api_key)
     
     def get_company_info(self, company_name):
@@ -459,60 +552,6 @@ def index():
     </html>
     """
     return html
-
-@app.route('/search', methods=['POST'])
-def search():
-    try:
-        data = request.json
-        print(f"Empfangene Daten: {data}")
-        companies = data.get('companies', [])
-        anthropic_key = data.get('anthropicKey')
-        
-        print(f"Unternehmen: {companies}")
-        print(f"API-Schlüssel vorhanden: {bool(anthropic_key)}")
-        
-        if not companies:
-            return jsonify({'error': 'Keine Unternehmen angegeben'}), 400
-        
-        if not anthropic_key:
-            return jsonify({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein.'}), 400
-        
-        # Claude-Client initialisieren
-        try:
-            print("Initialisiere Claude-Client...")
-            claude = ClaudeClient(api_key=anthropic_key)
-            print("Claude-Client erfolgreich initialisiert")
-        except ValueError as e:
-            print(f"ValueError bei der Initialisierung: {e}")
-            return jsonify({'error': str(e)}), 400
-        except Exception as e:
-            print(f"Ausnahme bei der Initialisierung: {e}")
-            return jsonify({'error': f'Fehler bei der Initialisierung des Claude-Clients: {str(e)}'}), 500
-        
-        # Ergebnisse für jedes Unternehmen abrufen
-        results = []
-        for company in companies:
-            try:
-                print(f"Verarbeite Unternehmen: {company}")
-                result = claude.get_company_info(company)
-                results.append(result)
-                print(f"Ergebnis für {company}: {result}")
-            except Exception as e:
-                print(f"Fehler bei {company}: {e}")
-                results.append({
-                    'name': company,
-                    'phone': None,
-                    'email': None,
-                    'website': None
-                })
-        
-        return jsonify({
-            'message': f"{len(results)} Unternehmen erfolgreich verarbeitet",
-            'data': results
-        })
-    except Exception as e:
-        print(f"Unbehandelte Ausnahme in search: {e}")
-        return jsonify({'error': f'Ein unerwarteter Fehler ist aufgetreten: {str(e)}'}), 500
 
 @app.route('/test', methods=['GET'])
 def test():
