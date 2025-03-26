@@ -26,9 +26,10 @@ class ClaudeClient:
 
         Für Telefonnummern:
         - Suche nach offiziellen Kontaktseiten oder "Kontakt"-Abschnitten auf der Unternehmenswebsite
-        - Überprüfe die Haupttelefonnummer des Unternehmens, nicht lokale Niederlassungen
+        - Achte besonders auf Telefonnummern im Header oder Footer der Website
+        - Suche nach Nummern, die als "Tel:", "Phone:", "Call us:" oder ähnlich gekennzeichnet sind
         - Stelle sicher, dass die Nummer vollständig ist (mit Ländervorwahl)
-        - Behalte das originale Format der Nummer bei, z.B. +1 877.800.1634
+        - Behalte das originale Format der Nummer bei, z.B. (239) 325-5180 oder +1 877.800.1634
         - Überprüfe die Nummer sorgfältig - sie ist ein kritisches Element
 
         Für E-Mail-Adressen:
@@ -54,9 +55,9 @@ class ClaudeClient:
         try:
             response = self.client.messages.create(
                 model="claude-3-haiku-20240307",
-                max_tokens=1000,
-                temperature=0,
-                system="Du bist ein hilfreicher Assistent, der Unternehmensinformationen recherchiert und im JSON-Format zurückgibt.",
+                max_tokens=1500,
+                temperature=0.2,  # Leicht erhöhte Temperatur für mehr Exploration
+                system="Du bist ein präziser Recherche-Assistent, der Unternehmensinformationen findet. Achte besonders auf die korrekte Telefonnummer, die exakt so wiedergegeben werden soll, wie sie auf der offiziellen Website erscheint.",
                 messages=[
                     {"role": "user", "content": prompt}
                 ]
@@ -71,7 +72,14 @@ class ClaudeClient:
             elif "```" in content:
                 json_str = content.split("```")[1].strip()
             else:
-                json_str = content.strip()
+                # Versuche, JSON direkt aus dem Text zu extrahieren
+                import re
+                json_pattern = r'\{.*\}'
+                match = re.search(json_pattern, content, re.DOTALL)
+                if match:
+                    json_str = match.group(0)
+                else:
+                    json_str = content.strip()
             
             # Versuche, das JSON zu parsen
             try:
@@ -99,6 +107,10 @@ class ClaudeClient:
                 "email": None,
                 "website": None
             }
+
+    def _make_claude_request(self, company_name):
+        # Ursprüngliche Implementierung hier
+        pass
 
 @app.route('/')
 def index():
