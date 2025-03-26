@@ -1,9 +1,10 @@
 from http.server import BaseHTTPRequestHandler
-from app import app
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import os
 import anthropic
 import json
+
+app = Flask(__name__)
 
 class ClaudeClient:
     def __init__(self, api_key):
@@ -11,7 +12,15 @@ class ClaudeClient:
             raise ValueError("Anthropic API-Schlüssel ist erforderlich")
         
         self.api_key = api_key
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+        # Verwenden Sie die neueste Methode zur Initialisierung des Clients
+        try:
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+        except TypeError as e:
+            # Fallback für ältere Versionen der Bibliothek
+            if "unexpected keyword argument" in str(e):
+                self.client = anthropic.Client(api_key=self.api_key)
+            else:
+                raise
     
     def get_company_info(self, company_name):
         prompt = f"""
@@ -49,18 +58,27 @@ class ClaudeClient:
         """
         
         try:
-            response = self.client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=1500,
-                temperature=0.2,
-                system="Du bist ein präziser Recherche-Assistent, der Unternehmensinformationen findet. Achte besonders auf die korrekte Telefonnummer, die exakt so wiedergegeben werden soll, wie sie auf der offiziellen Website erscheint.",
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
-            # Extrahiere das JSON aus der Antwort
-            content = response.content[0].text
+            # Versuche zuerst die neuere API-Version
+            try:
+                response = self.client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=1500,
+                    temperature=0.2,
+                    system="Du bist ein präziser Recherche-Assistent, der Unternehmensinformationen findet. Achte besonders auf die korrekte Telefonnummer, die exakt so wiedergegeben werden soll, wie sie auf der offiziellen Website erscheint.",
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                content = response.content[0].text
+            except (AttributeError, TypeError):
+                # Fallback für ältere API-Version
+                response = self.client.completion(
+                    prompt=f"\n\nHuman: {prompt}\n\nAssistant:",
+                    model="claude-3-haiku-20240307",
+                    max_tokens_to_sample=1500,
+                    temperature=0.2
+                )
+                content = response.completion
             
             # Bereinige die Antwort, falls sie nicht direkt als JSON formatiert ist
             if "```json" in content:
