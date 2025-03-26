@@ -1,108 +1,7 @@
 from http.server import BaseHTTPRequestHandler
-from flask import Flask, request, jsonify
-import os
-import anthropic
 import json
-import urllib.parse
-
-app = Flask(__name__)
-
-# Korrekter Vercel-Handler
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-        
-        path = self.path
-        if path == '/':
-            response = index()
-        elif path == '/test':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok", "message": "Test erfolgreich"}).encode())
-            return
-        else:
-            response = "404 Not Found"
-        
-        self.wfile.write(response.encode())
-        return
-    
-    def do_POST(self):
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length)
-        
-        if self.path == '/search':
-            try:
-                data = json.loads(post_data.decode('utf-8'))
-                companies = data.get('companies', [])
-                anthropic_key = data.get('anthropicKey')
-                
-                if not companies:
-                    self.send_response(400)
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({'error': 'Keine Unternehmen angegeben'}).encode())
-                    return
-                
-                if not anthropic_key:
-                    self.send_response(400)
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein.'}).encode())
-                    return
-                
-                # Claude-Client initialisieren
-                try:
-                    claude = ClaudeClient(api_key=anthropic_key)
-                except ValueError as e:
-                    self.send_response(400)
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({'error': str(e)}).encode())
-                    return
-                except Exception as e:
-                    self.send_response(500)
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({'error': f'Fehler bei der Initialisierung des Claude-Clients: {str(e)}'}).encode())
-                    return
-                
-                # Ergebnisse für jedes Unternehmen abrufen
-                results = []
-                for company in companies:
-                    try:
-                        result = claude.get_company_info(company)
-                        results.append(result)
-                    except Exception as e:
-                        results.append({
-                            'name': company,
-                            'phone': None,
-                            'email': None,
-                            'website': None
-                        })
-                
-                self.send_response(200)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({
-                    'message': f"{len(results)} Unternehmen erfolgreich verarbeitet",
-                    'data': results
-                }).encode())
-                return
-            except Exception as e:
-                self.send_response(500)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': f'Ein unerwarteter Fehler ist aufgetreten: {str(e)}'}).encode())
-                return
-        else:
-            self.send_response(404)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({'error': 'Endpoint nicht gefunden'}).encode())
-            return
+import anthropic
+import os
 
 class ClaudeClient:
     def __init__(self, api_key):
@@ -148,7 +47,6 @@ class ClaudeClient:
         """
         
         try:
-            # Verwende die einfachere completion-Methode
             response = self.client.completion(
                 prompt=f"\n\nHuman: {prompt}\n\nAssistant:",
                 model="claude-3-haiku-20240307",
@@ -199,9 +97,8 @@ class ClaudeClient:
                 "website": None
             }
 
-@app.route('/')
-def index():
-    html = """
+def get_html():
+    return """
     <!DOCTYPE html>
     <html lang="de">
     <head>
@@ -354,41 +251,48 @@ def index():
                     </div>
                     
                     <div class="d-grid gap-2">
-                        <button id="searchBtn" class="btn btn-primary">
+                        <button id="searchBtn" class="btn btn-primary btn-lg">
                             <i class="bi bi-search"></i> Unternehmensdaten suchen
-                            <span class="spinner-border spinner-border-sm" id="spinner" role="status" aria-hidden="true"></span>
+                            <span id="spinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                         </button>
                     </div>
                     
-                    <div id="results" class="card mt-4" style="display: none;">
-                        <div class="card-header">
-                            <i class="bi bi-list-check"></i> Ergebnisse
-                        </div>
-                        <div class="card-body">
-                            <div id="summary" class="alert alert-success"></div>
-                            <div class="table-responsive">
-                                <table class="table table-striped" style="width: 100%;">
-                                    <thead>
-                                        <tr>
-                                            <th style="width: 20%;">Unternehmen</th>
-                                            <th style="width: 15%;">Telefon</th>
-                                            <th style="width: 15%;">E-Mail</th>
-                                            <th style="width: 50%;">Website</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="resultTable">
-                                    </tbody>
-                                </table>
+                    <div id="results" class="mt-5" style="display: none;">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="bi bi-list-check"></i> Ergebnisse
+                                    </div>
+                                    <button id="exportBtn" class="btn btn-sm btn-outline-light">
+                                        <i class="bi bi-download"></i> Als CSV exportieren
+                                    </button>
+                                </div>
                             </div>
-                            <button id="exportBtn" class="btn btn-success mt-3">
-                                <i class="bi bi-download"></i> Als CSV exportieren
-                            </button>
+                            <div class="card-body">
+                                <p id="summary" class="text-muted"></p>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Unternehmen</th>
+                                                <th>Telefon</th>
+                                                <th>E-Mail</th>
+                                                <th>Website</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="resultTable">
+                                            <!-- Hier werden die Ergebnisse eingefügt -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
+        
         <script>
             document.getElementById('searchBtn').addEventListener('click', async function() {
                 const companyListText = document.getElementById('companyList').value;
@@ -406,14 +310,12 @@ def index():
                 const anthropicKey = apiKeyInput ? apiKeyInput.value.trim() : '';
                 
                 if (!anthropicKey) {
-                    alert('Bitte geben Sie einen Anthropic API-Schlüssel ein. Dieser ist erforderlich, um die Suche durchzuführen.');
-                    apiKeyInput.focus();
+                    alert('Bitte geben Sie einen Anthropic API-Schlüssel ein.');
                     return;
                 }
                 
                 if (!anthropicKey.startsWith('sk-ant-')) {
-                    alert('Der eingegebene API-Schlüssel scheint ungültig zu sein. Anthropic API-Schlüssel beginnen mit "sk-ant-".');
-                    apiKeyInput.focus();
+                    alert('Der API-Schlüssel scheint ungültig zu sein. Er sollte mit "sk-ant-" beginnen.');
                     return;
                 }
                 
@@ -428,7 +330,7 @@ def index():
                         anthropicKey: anthropicKey
                     };
                     
-                    const response = await fetch('/search', {
+                    const response = await fetch('/api/search', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -551,22 +453,86 @@ def index():
     </body>
     </html>
     """
-    return html
 
-@app.route('/test', methods=['GET'])
-def test():
-    return jsonify({"status": "ok", "message": "Test erfolgreich"})
-
-@app.errorhandler(500)
-def handle_500(e):
-    print(f"500 Fehler: {str(e)}")
-    return jsonify({"error": "Ein interner Serverfehler ist aufgetreten. Bitte versuchen Sie es später erneut."}), 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    print(f"Unbehandelte Ausnahme: {str(e)}")
-    return jsonify({"error": f"Ein unerwarteter Fehler ist aufgetreten: {str(e)}"}), 500
-
-# Für lokale Entwicklung
-if __name__ == '__main__':
-    app.run(debug=True)
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(get_html().encode())
+        return
+    
+    def do_POST(self):
+        if self.path == '/api/search':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                companies = data.get('companies', [])
+                anthropic_key = data.get('anthropicKey')
+                
+                if not companies:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'Keine Unternehmen angegeben'}).encode())
+                    return
+                
+                if not anthropic_key:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'Anthropic API-Schlüssel fehlt. Bitte geben Sie einen API-Schlüssel ein.'}).encode())
+                    return
+                
+                # Claude-Client initialisieren
+                try:
+                    claude = ClaudeClient(api_key=anthropic_key)
+                except ValueError as e:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': str(e)}).encode())
+                    return
+                except Exception as e:
+                    self.send_response(500)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': f'Fehler bei der Initialisierung des Claude-Clients: {str(e)}'}).encode())
+                    return
+                
+                # Ergebnisse für jedes Unternehmen abrufen
+                results = []
+                for company in companies:
+                    try:
+                        result = claude.get_company_info(company)
+                        results.append(result)
+                    except Exception as e:
+                        results.append({
+                            'name': company,
+                            'phone': None,
+                            'email': None,
+                            'website': None
+                        })
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'message': f"{len(results)} Unternehmen erfolgreich verarbeitet",
+                    'data': results
+                }).encode())
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': f'Ein unerwarteter Fehler ist aufgetreten: {str(e)}'}).encode())
+                return
+        else:
+            self.send_response(404)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'error': 'Endpoint nicht gefunden'}).encode())
+            return
