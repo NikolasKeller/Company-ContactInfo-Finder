@@ -1,15 +1,15 @@
 from http.server import BaseHTTPRequestHandler
 import json
-import anthropic
 import os
+import requests
 
+# Direkte API-Anfrage anstelle der Anthropic-Bibliothek
 class ClaudeClient:
     def __init__(self, api_key):
         if not api_key:
             raise ValueError("Anthropic API-Schlüssel ist erforderlich")
         
         self.api_key = api_key
-        self.client = anthropic.Client(api_key=self.api_key)
     
     def get_company_info(self, company_name):
         prompt = f"""
@@ -47,28 +47,67 @@ class ClaudeClient:
         """
         
         try:
-            response = self.client.completion(
-                prompt=f"\n\nHuman: {prompt}\n\nAssistant:",
-                model="claude-3-haiku-20240307",
-                max_tokens_to_sample=1500,
-                temperature=0.2
+            # Direkte API-Anfrage mit der neuesten API-Version
+            headers = {
+                "anthropic-version": "2023-06-01",
+                "x-api-key": self.api_key,
+                "content-type": "application/json"
+            }
+            
+            data = {
+                "model": "claude-3-haiku-20240307",
+                "max_tokens": 1500,
+                "temperature": 0.2,
+                "system": "Du bist ein präziser Recherche-Assistent, der Unternehmensinformationen findet.",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            }
+            
+            response = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json=data
             )
-            content = response.completion
+            
+            if response.status_code != 200:
+                print(f"Fehler bei der API-Anfrage: {response.status_code} - {response.text}")
+                return {
+                    "name": company_name,
+                    "phone": None,
+                    "email": None,
+                    "website": None
+                }
+            
+            # Verarbeite die Antwort der neueren API-Version
+            response_data = response.json()
+            content = response_data.get("content", [])
+            
+            if not content or len(content) == 0:
+                return {
+                    "name": company_name,
+                    "phone": None,
+                    "email": None,
+                    "website": None
+                }
+            
+            # Extrahiere den Text aus dem ersten Content-Element
+            text_content = content[0].get("text", "")
             
             # Bereinige die Antwort, falls sie nicht direkt als JSON formatiert ist
-            if "```json" in content:
-                json_str = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                json_str = content.split("```")[1].strip()
+            if "```json" in text_content:
+                json_str = text_content.split("```json")[1].split("```")[0].strip()
+            elif "```" in text_content:
+                json_str = text_content.split("```")[1].strip()
             else:
                 # Versuche, JSON direkt aus dem Text zu extrahieren
                 import re
                 json_pattern = r'\{.*\}'
-                match = re.search(json_pattern, content, re.DOTALL)
+                match = re.search(json_pattern, text_content, re.DOTALL)
                 if match:
                     json_str = match.group(0)
                 else:
-                    json_str = content.strip()
+                    json_str = text_content.strip()
             
             # Versuche, das JSON zu parsen
             try:
